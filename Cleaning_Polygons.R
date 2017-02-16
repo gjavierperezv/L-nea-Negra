@@ -1,7 +1,6 @@
 #REFERENCE: https://github.com/ivanhigueram/deforestacion/blob/master/Cleaning/polygon_cleaning.R
 library(raster)
 library(rgdal)
-library(rasterVis)
 library(sp)
 library(ggplot2)
 library(maptools)
@@ -33,19 +32,16 @@ library(pbapply)
 #                                    #
 ###################################### 
 
-#Function to clean holes from polygons
-hole_free <- function(x){
-  BCp <- slot(x, "polygons")
-  holes <- lapply(BCp, function(y) sapply(slot(y, "Polygons"), slot, "hole")) 
-  res <- lapply(1:length(BCp), function(i) slot(BCp[[i]], "Polygons")[!holes[[i]]]) 
-  IDs <- row.names(x)
-  SpatialPolygons(lapply(1:length(res), function(i) Polygons(res[[i]], ID=IDs[i])), proj4string = CRS(proj4string(x))) 
-}
+setwd("~/GitHub/linea_negra/")
+source("Functions.R")
 
-setwd("~/Dropbox/Linea_Negra_R/Data/")
+#Directories
+# setwd("~/Dropbox/Linea_Negra_R/Data/")
+setwd("~/Dropbox/BANREP/Linea_Negra_R/Data/")
+
 
 # Loss-Year Brick Linea Negra 1km
-res <- brick("~/Downloads/loss_year_brick_1km.tif")
+res <- brick("loss_year_brick_1km.tif")
 #plot(res)
 
 # Create a border colombia geometry (to clean shoreline)
@@ -64,9 +60,8 @@ linea_negra <- readOGR(dsn = "Linea_Negra", layer = "Linea_Negra_Polygon") %>%
 
 linea_negra_proj <- linea_negra %>% spTransform(CRS=CRS("+init=epsg:3857"))
 
-
 # Parques nacionales naturales
-pnn <- readOGR(dsn = "WDPA/Protected_Areas/", layer = "WDPA_Jan2017_COL-shapefile-polygons") %>% 
+pnn <- readOGR(dsn = "WDPA/Protected_Areas/", layer = "WDPA_Jan2017_COL-shapefile-polygons", stringsAsFactors = F) %>% 
   spTransform(CRS=CRS("+init=epsg:3857")) %>%
   .[!.@data$STATUS_YR > 2012 & !.@data$GIS_AREA < 1 & .@data$MANG_AUTH == "Parques Nacionales Naturales de Colombia" , ] %>%
   gIntersection(., colombia)
@@ -116,6 +111,9 @@ plot(territories_buffer[[3]], add = T, border = "orange")
 #       (CLEANER APPROACH)             #
 ########################################
 
+#Load functions
+setwd("~/GitHub/linea_negra/")
+source("Functions.R")
 
 #Prepare data (union of poly and points)
 resguardos_p <- resguardos %>% as("SpatialLines") %>% as("SpatialPoints")
@@ -128,63 +126,8 @@ resg_pnn_p <- rbind(resguardos_p, pnn_ln_p)
 resg_pnn <- raster::union(resguardos_hole_free, pnn_ln_hole_free) # raster is the package and union is the name of the specific function within the package. :: helps to access the exact function from that specific package
 colombia_p <- colombia %>% as("SpatialLines") %>% as("SpatialPoints")
 
-#Eliminate close to water (from colombia_raster.R)
-
 
 #Clean SpatialPoints (from polygons of Natural parks) -remove other treatments and get effective boundaries-
-clean_treatments <- function(x, polygon, points_sp, points_border, shape){
-  # print(x$ID)
-  if(gIntersects(x, polygon)){
-    #Remove inside points
-    dif <- gDifference(x, polygon, drop_lower_td = T)
-    if(!is.null(dif)){
-      dif <- tidy(dif)[, 1:2] #Coordinates difference
-      polygon2_coords <- tidy(x)[,1:2] #Coordinates polygon
-      # Duplicated_coords is the non-intersecting points of the polygon2
-      duplicated_coords <- merge(dif, polygon2_coords) 
-      if(dim(duplicated_coords)[1] > 0){
-        res <- SpatialPoints(duplicated_coords, proj4string = CRS("+init=epsg:3857"))
-      } else {
-        res <- SpatialPoints(polygon2_coords, proj4string = CRS("+init=epsg:3857"))
-      }
-      
-    } else {
-      return(0)
-    }
-    #Remove close cofounding treatments
-    knn <- get.knnx(coordinates(points_sp), coordinates(res), k = 1, algorithm = "kd_tree") %>%
-      data.frame(.)
-    sp <- SpatialPointsDataFrame(res, knn, proj4string = CRS("+init=epsg:3857")) %>%
-      .[!.@data$nn.dist < 1000, ]
-    knn_border <- get.knnx(coordinates(points_border), coordinates(sp), k = 1, algorithm = "kd_tree") %>%
-      data.frame(.)
-    sp_border <- SpatialPointsDataFrame(sp, knn_border, proj4string = CRS("+init=epsg:3857")) %>%
-      .[!.@data$nn.dist < 4000, ]
-    # dif <- gDifference(shape, x) %>% as("SpatialLines") %>% as("SpatialPoints")
-    # knn_final <- get.knnx(coordinates(dif), coordinates(sp_border), k = 1, algorithm = "kd_tree") %>%
-    #   data.frame()
-    # sp_final <- SpatialPointsDataFrame(sp_border, knn_final, proj4string = CRS("+init=epsg:3857")) %>%
-    #   .[!.@data$nn.dist < 500, ]
-    # 
-  } else {
-    # Remove close cofounding treatments
-    points <- x %>% as("SpatialLines") %>% as("SpatialPoints")
-    knn <- get.knnx(coordinates(points_sp), coordinates(points), k = 1, algorithm = "kd_tree") %>%
-      data.frame(.)
-    sp <- SpatialPointsDataFrame(points, knn, proj4string = CRS("+init=epsg:3857")) %>%
-      .[!.@data$nn.dist < 1000, ]
-    knn_border <- get.knnx(coordinates(points_border), coordinates(sp), k = 1, algorithm = "kd_tree") %>%
-      data.frame(.)
-    sp_border <- SpatialPointsDataFrame(sp, knn_border, proj4string = CRS("+init=epsg:3857")) %>%
-      .[!.@data$nn.dist < 4000, ]
-    # dif <- gDifference(shape, x) %>% as("SpatialLines") %>% as("SpatialPoints")
-    # knn_final <- get.knnx(coordinates(dif), coordinates(sp_border), k = 1, algorithm = "kd_tree") %>%
-    #   data.frame()
-    # sp_final <- SpatialPointsDataFrame(sp_border, knn_final, proj4string = CRS("+init=epsg:3857")) %>%
-    #   .[!.@data$nn.dist < 500, ]
-  }
-  
-}
 
 #Clean polygon 
 clean <- clean_treatments(x = lineanegra_dens, polygon = resg_pnn, points_sp = resguardos_p, 
@@ -197,14 +140,6 @@ plot(clean, add = T, col = "red", pch = 19)
 #Clean shoreline of resguardos and PNN
 
 #Clean SpatialPoints (from polygons of Natural parks) -remove points ONLY near to national frontiers and border points-
-clean_treatments_border <- function(x, points_border){
-  sp <- x %>% as("SpatialLines") %>% as("SpatialPoints")
-  knn_border <- get.knnx(coordinates(points_border), coordinates(sp), k = 1, algorithm = "kd_tree") %>%
-    data.frame(.)
-  sp_final <- SpatialPointsDataFrame(sp, knn_border, proj4string = CRS("+init=epsg:3857")) %>%
-    .[!.@data$nn.dist < 5000, ] 
-  
-}
 
 list_poly <- list(pnn_ln, resguardos_ln)
 list_polygons_clean_border <- lapply(list_poly, clean_treatments_border, points_border = colombia_p)
@@ -331,123 +266,5 @@ write.csv(distance_dataframe, "distance_dataframe_territories", row.names = FALS
   load("cleaning_polygons.RData") 
 
   
-  #################################################
-  #                                               #
-  #        6.   CLEANING POLYGONS                 #
-  #           (NOT CLEAN APPROACH/TYPES           #
-  #                   OF PROTECTION)              #
-  #################################################  
-    
-
-  # Open protection levels
-  # ----------------------
-  setwd("~/Dropbox/Linea_Negra_R/Data/")
-  protect_areas <- list.files("Zonas_Protegidas_LN") %>%
-    .[str_detect(., ".shp")] %>% strsplit(., ".", fixed = T) %>%
-    unlist() %>% .[!str_detect(., "shp")] %>%
-    lapply(., function(x){
-      readOGR(dsn = "Zonas_Protegidas_LN" , layer = x) %>%
-        spTransform(CRS=CRS("+init=epsg:3857"))
-    })
-  
-  names <- list.files("Zonas_Protegidas_LN") %>%
-    .[str_detect(., ".shp")] %>% strsplit(., ".", fixed = T) %>%
-    unlist() %>% .[!str_detect(., "shp")] 
-  
-  #Graphs
-  plot(protect_areas[[4]])
-  plot(protect_areas[[3]], add = T, border = "red")
-  plot(protect_areas[[1]], add = T, border = "blue")
-  plot(protect_areas[[2]], add = T, border = "orange")
-  plot(protect_areas[[5]], add = T, border = "yellow")
-  
-  
-  #Prepare data
-  protect_areas_p <- lapply(protect_areas, function(x){
-    as(x, "SpatialLines") %>% as("SpatialPoints")
-  })
-  
-  protect_areas_buffer <- protect_areas %>%
-    lapply(., gBuffer, width = 50000, byid = T) %>%
-    lapply(spTransform, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-  
-  plot(protect_areas_buffer[[4]])
-  plot(protect_areas_buffer[[3]], add = T, border = "red")
-  plot(protect_areas_buffer[[1]], add = T, border = "blue")
-  plot(protect_areas_buffer[[2]], add = T, border = "orange")
-  plot(protect_areas_buffer[[5]], add = T, border = "yellow")
-  
-  #Clean geometries (remove shorelines)
-  list_polygons_clean_border <- lapply(protect_areas, clean_treatments_border, points_border = colombia_p) %>%
-    lapply(spTransform, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-  
-  
-  #Does it work?
-  plot(protect_areas_p[[4]], cex = 0.1, pch = 19)
-  plot(list_polygons_clean_border[[4]], add = T, cex = 0.1, pch = 19, col = "red")
-
-  plot(protect_areas_p[[1]], cex = 0.1, pch = 19)
-  plot(list_polygons_clean_border[[1]], add = T, cex = 0.1, pch = 19, col = "red")
-  
-  #Calculate distances
-
-  beginCluster()
-  system.time(mask_distance <- mapply(calculate_distances_parallel,
-                                      buffer = protect_areas_buffer, 
-                                      points = list_polygons_clean_border))
-  endCluster()
-  
-  #Identify treatment/control cells
-  cells_territories <- protect_areas %>%
-    lapply(spTransform, CRS=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")) %>%
-    lapply(., function(x){
-    cellFromPolygon(res_mask_ln, x)
-  })
-  
-  lapply(cells_territories, function(x){
-    unlist(x) %>% length()
-  })
-  
-  
-  #################################################
-  #                                               #
-  #         EXTRACT DISTANCE DATA FROM            #
-  #                       RASTERS                 #
-  #                                               #
-  #################################################
-  
-  #1. Extract distance as data frame per buffer (list element)
-  list_dataframes <- pblapply(mask_distance, as.data.frame, xy = T)
-  names(list_dataframes) <- names
-  
-  #2. Extract row names (id cells) and define treatments
-  list_dataframes <- lapply(list_dataframes, function(x){
-    x$ID <- row.names(x); x
-  })
-
-  # FAIL - Create treatments for all lists
-  # list_dataframes <- mapply(function(x, y){
-  #   x %>%
-  #   mutate(., treatment = ifelse(ID %in% unlist(y), 1, 0)) %>%
-  #     data.frame()
-  # }, x = list_dataframes, y = cells_territories, SIMPLIFY = T)
-  # 
-  # 
-  
-  list_dataframes[[1]]$treatment <- ifelse(list_dataframes[[1]]$ID %in% unlist(cells_territories[[1]]), 1, 0)
-  list_dataframes[[2]]$treatment <- ifelse(list_dataframes[[2]]$ID %in% unlist(cells_territories[[2]]), 1, 0)
-  list_dataframes[[3]]$treatment <- ifelse(list_dataframes[[3]]$ID %in% unlist(cells_territories[[3]]), 1, 0)
-  list_dataframes[[4]]$treatment <- ifelse(list_dataframes[[4]]$ID %in% unlist(cells_territories[[4]]), 1, 0)
-  list_dataframes[[5]]$treatment <- ifelse(list_dataframes[[5]]$ID %in% unlist(cells_territories[[5]]), 1, 0)
-  
-  #3. Append all elements of the list (1: LN, 2: Resg, 3: PNN) 
-  distance_dataframe <- do.call(rbind, list_dataframes)
-  distance_dataframe$buffer_id <- rep(names(list_dataframes), sapply(list_dataframes, nrow)) #identify cells from buffers
-  
-  #4. Export
-  setwd("~/Dropbox/Linea_Negra_R/Data/Dataframes/")
-  write.csv(distance_dataframe, "distance_dataframe_protected_areas.csv", row.names = FALSE)
-  
-  
-
+ 
 
