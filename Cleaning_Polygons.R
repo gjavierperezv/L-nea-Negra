@@ -39,7 +39,6 @@ source("Functions.R")
 # setwd("~/Dropbox/Linea_Negra_R/Data/")
 setwd("~/Dropbox/BANREP/Linea_Negra_R/Data/")
 
-
 # Loss-Year Brick Linea Negra 1km
 res <- brick("loss_year_brick_1km.tif")
 #plot(res)

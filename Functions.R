@@ -111,8 +111,9 @@ shp2raster <- function(shp, mask.raster, label, value, transform = FALSE, proj.f
 ###############################################################################
 
 #Clean SpatialPoints (from polygons of Natural parks) -remove other treatments and get effective boundaries-
+#Clean SpatialPoints (from polygons of Natural parks) -remove other treatments and get effective boundaries-
 clean_treatments <- function(x, polygon, points_sp, points_border, shape){
-  # print(x$ID)
+  print(x$ID)
   if(gIntersects(x, polygon)){
     #Remove inside points
     dif <- gDifference(x, polygon, drop_lower_td = T)
@@ -138,13 +139,13 @@ clean_treatments <- function(x, polygon, points_sp, points_border, shape){
     knn_border <- get.knnx(coordinates(points_border), coordinates(sp), k = 1, algorithm = "kd_tree") %>%
       data.frame(.)
     sp_border <- SpatialPointsDataFrame(sp, knn_border, proj4string = CRS("+init=epsg:3857")) %>%
-      .[!.@data$nn.dist < 4000, ]
+      .[!.@data$nn.dist < 1000, ]
     # dif <- gDifference(shape, x) %>% as("SpatialLines") %>% as("SpatialPoints")
     # knn_final <- get.knnx(coordinates(dif), coordinates(sp_border), k = 1, algorithm = "kd_tree") %>%
     #   data.frame()
     # sp_final <- SpatialPointsDataFrame(sp_border, knn_final, proj4string = CRS("+init=epsg:3857")) %>%
     #   .[!.@data$nn.dist < 500, ]
-    # 
+    
   } else {
     # Remove close cofounding treatments
     points <- x %>% as("SpatialLines") %>% as("SpatialPoints")
@@ -155,7 +156,7 @@ clean_treatments <- function(x, polygon, points_sp, points_border, shape){
     knn_border <- get.knnx(coordinates(points_border), coordinates(sp), k = 1, algorithm = "kd_tree") %>%
       data.frame(.)
     sp_border <- SpatialPointsDataFrame(sp, knn_border, proj4string = CRS("+init=epsg:3857")) %>%
-      .[!.@data$nn.dist < 4000, ]
+      .[!.@data$nn.dist < 1000, ]
     # dif <- gDifference(shape, x) %>% as("SpatialLines") %>% as("SpatialPoints")
     # knn_final <- get.knnx(coordinates(dif), coordinates(sp_border), k = 1, algorithm = "kd_tree") %>%
     #   data.frame()
@@ -164,8 +165,6 @@ clean_treatments <- function(x, polygon, points_sp, points_border, shape){
   }
   
 }
-
-
 #Clean SpatialPoints (from polygons of Natural parks) -remove points ONLY near to national frontiers and border points-
 clean_treatments_border <- function(x, points_border){
   sp <- x %>% as("SpatialLines") %>% as("SpatialPoints")
