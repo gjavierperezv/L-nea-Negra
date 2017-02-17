@@ -39,6 +39,8 @@ defo_dist <- distance %>%
     # merge(., clump, by = "ID", all.x = T) %>%
     # mutate(clumps = ifelse(is.na(clumps), 0, 1))
 
+############################################ RD ESTIMATES ##################################################
+
 
 #RD - Deforestation
 defo_dist_buffer <- split(defo_dist, defo_dist$buffer_id) %>%
@@ -74,7 +76,52 @@ stargazer(df_optimal[2:dim(df_optimal)[1], ], type = "text", summary = FALSE, ro
 df_optimal <- rd_to_df_2(lights_dist_buffer, split(defo_dist, defo_dist$buffer_id))
 stargazer(df_optimal[2:dim(df_optimal)[1], ], type = "text", summary = FALSE, rownames = TRUE, out = "rd_type_lights.txt")
 
-#Graphs!
+####################################### RD GRAPHS ################################################
+
+#rdrobust package graphs: ugly shaded CI (maybe we can recode the function rdplot and add an aditional polygon()). 
+setwd(str_c(data, "Graphs"))
+mapply(function(x, type, name){
+  pdf(str_c("RD_defo", type, ".pdf"), height=6, width=12)
+  rdplot(
+    y = x$loss_sum,
+    x = x$dist_disc,
+    kernel = "triangular",
+    # shade = TRUE,
+    binselect = "espr",
+    y.lim = c(0, 10),
+    x.lim = c(-10, 10),
+    title = str_c("Regresión discontinua para", name, sep = " "),
+    x.label = "Distancia a la frontera (km.)",
+    y.label = "Deforestación (ha x km2)",
+    ci = 90
+    )
+  dev.off()
+}, x = split(defo_dist, defo_dist$buffer_id) , name = c("Linea negra", "Doble protección \nLínea Negra + PNN", "Doble protección \nLínea Negra + RI", "Triple Protección"),
+type = c("LineaNegra", "Doble_LN_PNN", "Doble_LN_Resg", "Triple"))
+
+
+setwd(str_c(data, "Graphs"))
+mapply(function(x, type, name){
+  pdf(str_c("RD_lights", type, ".pdf"), height=6, width=12)
+  rdplot(
+    y = x$F182013.v4c_web.stable_lights.avg_vis,
+    x = x$dist_disc,
+    kernel = "triangular",
+    # shade = TRUE,
+    binselect = "espr",
+    y.lim = c(0, 15),
+    x.lim = c(-10, 10),
+    title = str_c("Regresión discontinua para", name, sep = " "),
+    x.label = "Distancia a la frontera (km.)",
+    y.label = "Deforestación (ha x km2)",
+    ci = 90
+  )
+  dev.off()
+}, x = split(defo_dist, defo_dist$buffer_id) , name = c("Linea negra", "Doble protección \nLínea Negra + PNN", "Doble protección \nLínea Negra + RI", "Triple Protección"),
+type = c("LineaNegra", "Doble_LN_PNN", "Doble_LN_Resg", "Triple"))
+
+
+#Beautiful homemade ggplot graphs, but not with perfect RD estimations
 
 defo_dist_all <- split(defo_dist, defo_dist$buffer_id) #Collapse all dataframes into one list and remove "all"
 
