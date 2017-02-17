@@ -197,7 +197,7 @@ processing_rasters <- function(layer.list, ext, shape){
 
 
 ################################################################################
-#                              TABLE MANAGMENT                                #
+#                             TABLES MANAGMENT                                #
 ###############################################################################
 
 rd_to_df <- function(list, dataframe){
@@ -212,17 +212,46 @@ rd_to_df <- function(list, dataframe){
   defo_mean <- mapply(function(x, y){
     y %>%
       filter(abs(dist_disc) <= x$bws[1, 1] & treatment == 0) %>% 
-      summarize(mean = mean(loss_sum))
+      dplyr::summarize(mean = mean(loss_sum))
   }, x = list , y = dataframe, SIMPLIFY = F) %>% unlist()
   
   df <- rd %>% cbind(., defo_mean) %>% t() %>% 
-    as.data.frame() %>% dplyr::rename(Nacionales = V1,
-                                      Regionales = V2, Resguardos = V3,
-                                      Comunidades = V4)
-  row.names(df) <- c("Tratamiento", "StdErr", "Z", "p", "CI_l", "CI_u", "N_left","N_right", "N", "bws", "Media control")
+   as.data.frame() 
+  names(df) <- NULL
+  names(df) <- c("LineaNegra", "Doble_LN_PNN", "Doble_LN_Resg", "Triple")
+  
+  # %>% dplyr::rename(LineaNegra = Linea_Negra.mean,
+  #                                     Doble_LN_PNN = Proteccion_Doble_LN_&_PNN.mean, Doble_LN_Resg = Proteccion_Doble_LN_&_Resg.mean,
+  #                                     Triple = Triple_Proteccion_LN.mean)
+  row.names(df) <- c("Territorio","Tratamiento", "StdErr", "Z", "p", "CI_l", "CI_u", "N_left","N_right", "N", "bws", "Media control")
   return(df)
 }
 
-
+rd_to_df_2 <- function(list, dataframe){
+  rd <- lapply(list, "[", "tabl3.str") %>%
+    lapply(as.data.frame) %>%
+    lapply( "[", 3 , ) %>%
+    ldply() %>% mutate(N_l = unlist(lapply(list, "[", "N_l"))) %>%
+    mutate(N_r = unlist(lapply(list, "[", "N_r"))) %>%
+    mutate(N = N_l + N_r) %>%
+    mutate(bws = unlist(lapply(list, function(x) x$bws[1, 1])))
+  
+  lights_mean <- mapply(function(x, y){
+    y %>%
+      filter(abs(dist_disc) <= x$bws[1, 1] & treatment == 0) %>% 
+      dplyr::summarize(mean = mean(F182013.v4c_web.stable_lights.avg_vis))
+  }, x = list , y = dataframe, SIMPLIFY = F) %>% unlist()
+  
+  df <- rd %>% cbind(., lights_mean) %>% t() %>% 
+    as.data.frame() 
+  names(df) <- NULL
+  names(df) <- c("LineaNegra", "Doble_LN_PNN", "Doble_LN_Resg", "Triple")
+  
+  # %>% dplyr::rename(LineaNegra = Linea_Negra.mean,
+  #                                     Doble_LN_PNN = Proteccion_Doble_LN_&_PNN.mean, Doble_LN_Resg = Proteccion_Doble_LN_&_Resg.mean,
+  #                                     Triple = Triple_Proteccion_LN.mean)
+  row.names(df) <- c("Territorio","Tratamiento", "StdErr", "Z", "p", "CI_l", "CI_u", "N_left","N_right", "N", "bws", "Media control")
+  return(df)
+}
 
 
