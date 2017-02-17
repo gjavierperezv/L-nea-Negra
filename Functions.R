@@ -169,12 +169,12 @@ clean_treatments_border <- function(x, points_border){
 
 
 #Function to crop/mask raster and calculate distance using all cores from CPU.
-calculate_distances_parallel <- function(buffer, points){
+calculate_distances_parallel <- function(points){
   if(length(points)  > 2 & typeof(points) == "S4"){
-    crop(res[[1]], buffer) %>%
-      mask(buffer) %>%
+    crop(res[[1]], buffer_areas) %>%
+      mask(buffer_areas) %>%
       clusterR(.,distanceFromPoints, args = list(xy = points)) %>%
-      mask(buffer) %>%
+      mask(buffer_areas) %>%
       resample(res[[1]])
   } else
     return(0)
@@ -193,3 +193,36 @@ processing_rasters <- function(layer.list, ext, shape){
     stack() %>% 
     mask(shape)
 }
+
+
+
+################################################################################
+#                              TABLE MANAGMENT                                #
+###############################################################################
+
+rd_to_df <- function(list, dataframe){
+  rd <- lapply(list, "[", "tabl3.str") %>%
+    lapply(as.data.frame) %>%
+    lapply( "[", 3 , ) %>%
+    ldply() %>% mutate(N_l = unlist(lapply(list, "[", "N_l"))) %>%
+    mutate(N_r = unlist(lapply(list, "[", "N_r"))) %>%
+    mutate(N = N_l + N_r) %>%
+    mutate(bws = unlist(lapply(list, function(x) x$bws[1, 1])))
+  
+  defo_mean <- mapply(function(x, y){
+    y %>%
+      filter(abs(dist_disc) <= x$bws[1, 1] & treatment == 0) %>% 
+      summarize(mean = mean(loss_sum))
+  }, x = list , y = dataframe, SIMPLIFY = F) %>% unlist()
+  
+  df <- rd %>% cbind(., defo_mean) %>% t() %>% 
+    as.data.frame() %>% dplyr::rename(Nacionales = V1,
+                                      Regionales = V2, Resguardos = V3,
+                                      Comunidades = V4)
+  row.names(df) <- c("Tratamiento", "StdErr", "Z", "p", "CI_l", "CI_u", "N_left","N_right", "N", "bws", "Media control")
+  return(df)
+}
+
+
+
+

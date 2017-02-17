@@ -1,3 +1,29 @@
+library(raster)
+library(rgdal)
+library(sp)
+library(ggplot2)
+library(maptools)
+library(lattice)
+library(plyr)
+library(grid)
+library(FNN)
+library(dplyr)
+library(broom)
+library(stringr)
+library(geosphere)
+library(gtools)
+library(magrittr)
+library(rgeos)
+library(pbapply)
+
+setwd("~/GitHub/linea_negra/")
+source("Functions.R")
+
+#Directories
+#data <-  setwd("~/Dropbox/Linea_Negra_R/Data/")
+data <- setwd("~/Dropbox/BANREP/Linea_Negra_R/Data/")
+
+
 #################################################
 #                                               #
 #             CLEANING POLYGONS                 #
@@ -18,14 +44,22 @@ colombia <- readOGR(dsn = "Colombia_Deptos", layer = "Colombia_Deptos") %>%
   hole_free()
 # plot(colombia)
 
+# Resguardos de Magdalena, La Guajira y Cesar
+# ------------------------------------------------
+resguardos <- readOGR(dsn = "IGAC", layer = "Resguardos_Selected_LNegra") %>%
+  spTransform(CRS=CRS("+init=epsg:3857"))
+
+resguardos_ln <- raster::intersect(resguardos, linea_negra_proj) %>%
+  spTransform(CRS=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+resguardos_ln_proj <- resguardos_ln %>% spTransform(CRS=CRS("+init=epsg:3857"))
+
 # PNN dentro de la Línea Negra
 # ---------------------------------
-pnn <- readOGR(dsn = "WDPA/Protected_Areas/", layer = "WDPA_Jan2017_COL-shapefile-polygons") %>% 
+pnn <- readOGR(dsn = "WDPA/Protected_Areas/", layer = "WDPA_Jan2017_COL-shapefile-polygons", stringsAsFactors = F) %>% 
   spTransform(CRS=CRS("+init=epsg:3857")) %>%
   .[!.@data$STATUS_YR > 2012 & !.@data$GIS_AREA < 1 & .@data$MANG_AUTH == "Parques Nacionales Naturales de Colombia" , ]
 
 pnn_ln <- raster::intersect(pnn, linea_negra_proj)
-
 
 # Polígono Línea Negra
 # ---------------------------------
@@ -72,9 +106,13 @@ protect_areas_p <- lapply(protect_areas, function(x){
   as(x, "SpatialLines") %>% as("SpatialPoints")
 })
 
-protect_areas_buffer <- protect_areas %>%
-  lapply(., gBuffer, width = 50000, byid = T) %>%
-  lapply(spTransform, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+buffer_areas <- gBuffer(protect_areas[[4]], width = 50000) %>%
+  spTransform(.,CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+
+# protect_areas_buffer <- protect_areas %>%
+#   lapply(., gBuffer, width = 50000, byid = T) %>%
+#   lapply(spTransform, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
 #Visualize types of protection
 plot(protect_areas_buffer[[3]], add = T, border = "red")
@@ -110,8 +148,8 @@ resg_pnn <- raster::union(resguardos_hole_free, pnn_ln_hole_free) # raster is th
 #############################################################################
 
 #Clean by case
-polygons_contiguous <- list(resguardos_ln, pnn_ln, protect_areas[[1]], resg_pnn)
-points_contiguous <- list(resguardos_p, pnn_ln_p, as(as(protect_areas[[1]], "SpatialLines"), "SpatialPoints"), resg_pnn_p)
+polygons_contiguous <- list(resguardos_ln_proj, pnn_ln, protect_areas[[1]], resg_pnn)
+points_contiguous <- list(resguardos_p, pnn_ln_p, protect_areas_p[[1]], resg_pnn_p)
 
 list_polygons_clean_border <- mapply(function(x, y, z){
   clean_treatments(
@@ -119,12 +157,11 @@ list_polygons_clean_border <- mapply(function(x, y, z){
     polygon = y,
     points_sp = z,
     points_border = colombia_p)
-  }, x = protect_areas, y = polygons_contiguous, z = points_contiguous) %>%
-  lapply(spTransform, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+  }, x = protect_areas, y = polygons_contiguous, z = points_contiguous)
 
 #Does it work?
-plot(protect_areas[[2]])
-plot(list_polygons_clean_border[[2]], add = T, cex = 0.1, pch = 19, col = "red")
+plot(protect_areas[[1]])
+plot(list_polygons_clean_border[[1]], add = T, cex = 0.1, pch = 19, col = "red")
 
 plot(protect_areas[[4]])
 plot(list_polygons_clean_border[[4]], add = T, cex = 1, pch = 19, col = "red")
@@ -139,6 +176,9 @@ plot(list_polygons_clean_border[[4]], add = T, cex = 1, pch = 19, col = "red")
 ###########################################################################
 
 
+# Loss-Year Brick Linea Negra 1km
+res <- brick("loss_year_brick_1km.tif")
+#plot(res)
 
 #Project all geometries to WGS84 (easier than to reproject raster)
 clean_frontiers <- list_polygons_clean_border %>%
@@ -151,34 +191,31 @@ clean_frontiers <- list_polygons_clean_border %>%
     }
   })
 
-protect_areas_buffer <- protect_areas %>%
-  lapply(., function(x){
-    if(typeof(x) == "S4" & length(x) > 0){
-      sp <- gBuffer(x, width = 50000) %>%
-      spTransform(x, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-      return(sp)
-    } else { 
-      return(0)
-    }
-  })
 
-
-
-
+#I only use the buffer of LN since all the geometries are inside. 
+# protect_areas_buffer <- protect_areas %>%
+#   lapply(., function(x){
+#     if(typeof(x) == "S4" & length(x) > 0){
+#       sp <- gBuffer(x, width = 50000) %>%
+#       spTransform(x, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+#       return(sp)
+#     } else { 
+#       return(0)
+#     }
+#   })
 
 
 
 beginCluster()
 system.time(mask_distance <- mapply(calculate_distances_parallel,
-                                    buffer = protect_areas_buffer, 
-                                    points = list_polygons_clean_border))
+                                    points = clean_frontiers))
 endCluster()
 
 #Identify treatment/control cells
 cells_territories <- protect_areas %>%
   lapply(spTransform, CRS=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")) %>%
   lapply(., function(x){
-    cellFromPolygon(res_mask_ln, x)
+    cellFromPolygon(res[[1]], x)
   })
 
 lapply(cells_territories, function(x){
@@ -215,14 +252,14 @@ list_dataframes[[1]]$treatment <- ifelse(list_dataframes[[1]]$ID %in% unlist(cel
 list_dataframes[[2]]$treatment <- ifelse(list_dataframes[[2]]$ID %in% unlist(cells_territories[[2]]), 1, 0)
 list_dataframes[[3]]$treatment <- ifelse(list_dataframes[[3]]$ID %in% unlist(cells_territories[[3]]), 1, 0)
 list_dataframes[[4]]$treatment <- ifelse(list_dataframes[[4]]$ID %in% unlist(cells_territories[[4]]), 1, 0)
-list_dataframes[[5]]$treatment <- ifelse(list_dataframes[[5]]$ID %in% unlist(cells_territories[[5]]), 1, 0)
 
 #3. Append all elements of the list (1: LN, 2: Resg, 3: PNN) 
 distance_dataframe <- do.call(rbind, list_dataframes)
 distance_dataframe$buffer_id <- rep(names(list_dataframes), sapply(list_dataframes, nrow)) #identify cells from buffers
+distance_dataframe <- distance_dataframe[complete.cases(distance_dataframe[, c("layer")]), ]
 
 #4. Export
-setwd("~/Dropbox/Linea_Negra_R/Data/Dataframes/")
+setwd(str_c(data, "/", "Dataframes"))
 write.csv(distance_dataframe, "distance_dataframe_protected_areas.csv", row.names = FALSE)
 
 

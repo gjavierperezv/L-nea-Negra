@@ -7,12 +7,16 @@ library(rdrobust)
 library(Hmisc)
 library(data.table)
 
+#Directories
+# Javier
+#data <- setwd("~/Dropbox/Linea_Negra_R/Data/Dataframes/")
+# Iván 
+data <- setwd("~/Dropbox/BANREP/Linea_Negra_R/Data/Dataframes/")
 
 #Load data from rasters
-setwd("~/Dropbox/Linea_Negra_R/Data/Dataframes/")
-distance <- fread("distance_dataframe_territories") %>% plyr::rename(., c("layer" = "dist"))
-defo <- fread("deforestation_dataframe.csv") %>% as.data.frame()
-lights <- fread("rasters_lights_dataframe.csv")
+distance <- fread("distance_dataframe_protected_areas.csv") %>% plyr::rename(., c("layer" = "dist"))
+defo <- fread("deforestation_dataframe.csv") %>% as.data.frame() %>% .[complete.cases(.[, c(3:17)]), ]
+lights <- fread("rasters_lights_dataframe.csv") %>% as.data.frame() %>% .[complete.cases(.[, c(3:37)]), ]
 
 #Aggregate deforestation (2001 - 2012)
 defo$loss_sum <- rowSums(defo[, names(defo)[4:16]])
@@ -50,9 +54,6 @@ lights_dist_buffer <- split(defo_dist, defo_dist$buffer_id) %>%
                   vce = "nn",
                   all = T)
   })
-
-
-
 
 
 #4. RD: Remove from RI all pixels that are not PNN

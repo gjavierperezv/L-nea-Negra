@@ -56,8 +56,8 @@ setwd("~/Dropbox/BANREP/Linea_Negra_R/Data/")
   
   # 2.1. Resguardos de Magdalena, La Guajira y Cesar
   # ------------------------------------------------
-  resguardos <- readOGR(dsn = "IGAC", layer = "Resguardos_Selected_LNegra") 
-  resguardos <-  spTransform(resguardos, CRS=CRS("+init=epsg:3857"))
+  resguardos <- readOGR(dsn = "IGAC", layer = "Resguardos_Selected_LNegra") %>%
+    spTransform(CRS=CRS("+init=epsg:3857"))
   resguardos@data$AREA_KM2_resg <- gArea(resguardos, byid = T)/1e6
   dev.off() # Clear all plots
   plot(linea_negra_proj)
