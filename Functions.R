@@ -44,19 +44,6 @@ AddHoleToPolygon <-function(poly,hole){
   return(new)
 }
 
-###################################################################################
-
-
-# PROCESING RASTERS FUNCTION: crop, mask, make calculations and extract raster data
-
-processing_rasters <- function(layer.list, ext, shape){
-  layer.list %>%
-    lapply(setExtent, ext) %>%
-    lapply(crop, shape) %>%
-    stack() %>% 
-    mask(shape)
-}
-
 
 ###################################################################################
 
@@ -173,4 +160,36 @@ clean_treatments_border <- function(x, points_border){
   sp_final <- SpatialPointsDataFrame(sp, knn_border, proj4string = CRS("+init=epsg:3857")) %>%
     .[!.@data$nn.dist < 5000, ] 
   
+}
+
+
+################################################################################
+#                           FUNCTIONS FOR RASTERS                              #
+###############################################################################
+
+
+#Function to crop/mask raster and calculate distance using all cores from CPU.
+calculate_distances_parallel <- function(buffer, points){
+  if(length(points)  > 2 & typeof(points) == "S4"){
+    crop(res[[1]], buffer) %>%
+      mask(buffer) %>%
+      clusterR(.,distanceFromPoints, args = list(xy = points)) %>%
+      mask(buffer) %>%
+      resample(res[[1]])
+  } else
+    return(0)
+}
+
+
+###################################################################################
+
+
+# PROCESING RASTERS FUNCTION: crop, mask, make calculations and extract raster data
+
+processing_rasters <- function(layer.list, ext, shape){
+  layer.list %>%
+    lapply(setExtent, ext) %>%
+    lapply(crop, shape) %>%
+    stack() %>% 
+    mask(shape)
 }

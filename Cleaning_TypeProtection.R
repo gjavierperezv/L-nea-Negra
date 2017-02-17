@@ -18,12 +18,21 @@ colombia <- readOGR(dsn = "Colombia_Deptos", layer = "Colombia_Deptos") %>%
   hole_free()
 # plot(colombia)
 
-# Polígono de la Línea Negra
+# PNN dentro de la Línea Negra
+# ---------------------------------
+pnn <- readOGR(dsn = "WDPA/Protected_Areas/", layer = "WDPA_Jan2017_COL-shapefile-polygons") %>% 
+  spTransform(CRS=CRS("+init=epsg:3857")) %>%
+  .[!.@data$STATUS_YR > 2012 & !.@data$GIS_AREA < 1 & .@data$MANG_AUTH == "Parques Nacionales Naturales de Colombia" , ]
+
+pnn_ln <- raster::intersect(pnn, linea_negra_proj)
+
+
+# Polígono Línea Negra
+# ---------------------------------
 linea_negra <- readOGR(dsn = "Linea_Negra", layer = "Linea_Negra_Polygon") %>%
   spTransform(CRS=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
 linea_negra_proj <- linea_negra %>% spTransform(CRS=CRS("+init=epsg:3857"))
-
 
 # Densify lines using geosphere package
 lineanegra_p <- linea_negra %>% as("SpatialLines") %>% as("SpatialPoints")  # _p for points
@@ -94,22 +103,70 @@ pnn_ln_hole_free <- hole_free(pnn_ln) %>% gBuffer(0.0001, byid = F)
 resg_pnn <- raster::union(resguardos_hole_free, pnn_ln_hole_free) # raster is the package and union is the name of the specific function within the package. :: helps to access the exact function from that specific package
 
 
-list_polygons_clean_border <- lapply(protect_areas, clean_treatments, 
-                                     polygon = resg_pnn,
-                                     points_sp = resg_pnn_p, 
-                                     points_border = colombia_p
-                                     # shape = pnn_ln
-                                     ) %>%
+############################### WARNING ######################################
+# CLEANING ALL CASES LISTED IN PROTECT_AREAS IN BATCH WILL LEAD TO ERRORS   #
+# SINCE ALL GEOMETRIES HAVE COMMON BOUNDARIES. THE BATCH CLEANING GENERATES #
+# UNREPRESENTATIVE GEOMETRIES WITHOUT BOUNDARIES                            #
+#############################################################################
+
+#Clean by case
+polygons_contiguous <- list(resguardos_ln, pnn_ln, protect_areas[[1]], resg_pnn)
+points_contiguous <- list(resguardos_p, pnn_ln_p, as(as(protect_areas[[1]], "SpatialLines"), "SpatialPoints"), resg_pnn_p)
+
+list_polygons_clean_border <- mapply(function(x, y, z){
+  clean_treatments(
+    x = x,
+    polygon = y,
+    points_sp = z,
+    points_border = colombia_p)
+  }, x = protect_areas, y = polygons_contiguous, z = points_contiguous) %>%
   lapply(spTransform, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
 #Does it work?
+plot(protect_areas[[2]])
+plot(list_polygons_clean_border[[2]], add = T, cex = 0.1, pch = 19, col = "red")
+
 plot(protect_areas[[4]])
 plot(list_polygons_clean_border[[4]], add = T, cex = 1, pch = 19, col = "red")
 
-plot(protect_areas_p[[1]], cex = 0.1, pch = 19)
-plot(list_polygons_clean_border[[1]], add = T, cex = 0.1, pch = 19, col = "red")
 
-#Calculate distances
+######################## DISTANCE CALCULATIONS ###########################
+
+################################ WARNING ##################################
+# We need a raster as a template. We will use deforestation raster masked #
+# to the buffer to mantain the size and ID's of rasters. For that we need #
+# to have all the geometries in WGS84 (re-project is hard!)               #
+###########################################################################
+
+
+
+#Project all geometries to WGS84 (easier than to reproject raster)
+clean_frontiers <- list_polygons_clean_border %>%
+  lapply(., function(x){
+    if(typeof(x) == "S4" & length(x) > 0){
+      sp <- spTransform(x, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+      return(sp)
+    } else { 
+      return(0)
+    }
+  })
+
+protect_areas_buffer <- protect_areas %>%
+  lapply(., function(x){
+    if(typeof(x) == "S4" & length(x) > 0){
+      sp <- gBuffer(x, width = 50000) %>%
+      spTransform(x, CRS = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+      return(sp)
+    } else { 
+      return(0)
+    }
+  })
+
+
+
+
+
+
 
 beginCluster()
 system.time(mask_distance <- mapply(calculate_distances_parallel,

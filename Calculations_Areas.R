@@ -131,7 +131,8 @@ setwd("~/Dropbox/BANREP/Linea_Negra_R/Data/")
        sin_proteccion <- gDifference(buffer_continental, linea_negra, byid = F, drop_lower_td = T) %>%
          spTransform(., CRS=CRS("+init=epsg:3857")) %>% # Proyectando la capa (metros)
          gDifference(., pnn, byid = F, drop_lower_td = T)  # Quitándole los Parques Nacionales 
-         # Leyendo la información de los Resguardos Indígenas
+         
+       # Leyendo la información de los Resguardos Indígenas
          resguardos_colombia_proj <- readOGR(dsn = "IGAC", layer = "Resguardos_Indigenas") %>% 
             spTransform(., CRS=CRS("+init=epsg:3857"))
             
